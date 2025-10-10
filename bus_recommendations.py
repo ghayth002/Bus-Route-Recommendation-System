@@ -294,7 +294,7 @@ def translate_station_to_arabic(french_name):
     return STATION_REVERSE.get(french_name, french_name)
 
 def find_matching_station(df, station_name, column_name):
-    """Find matching station name handling whitespace variations"""
+    """Find matching station name handling whitespace variations and case insensitivity"""
     # Get all unique stations from the column
     all_stations = df[column_name].dropna().unique()
 
@@ -302,10 +302,10 @@ def find_matching_station(df, station_name, column_name):
     if station_name in all_stations:
         return station_name
 
-    # Try with stripped whitespace
-    station_stripped = station_name.strip()
+    # Try with stripped whitespace and case-insensitive matching
+    station_stripped = station_name.strip().lower()
     for station in all_stations:
-        if station.strip() == station_stripped:
+        if station.strip().lower() == station_stripped:
             return station
 
     # Try partial match

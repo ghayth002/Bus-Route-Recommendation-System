@@ -199,7 +199,136 @@ Get current date, day, and season information for automatic filtering.
 }
 ```
 
-### 5. Get Route Recommendations (POST Method)
+### 5. Get Available Bus Lines
+
+**GET** `/lines`
+
+Retrieve list of all available bus lines.
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "lines": ["101-01", "101-02", "102-01", "102-02", "...more lines"],
+  "total_lines": 72
+}
+```
+
+### 6. Get Lines by Station
+
+**GET** `/stations/{station_name}/lines`
+
+Get all bus lines that have a specific station as departure or destination point.
+
+**Parameters:**
+
+- `station_name` (required): Station name in French (e.g., "Nabeul")
+- `role` (optional): Role of the station, either "departure" (default) or "destination"
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "station": "Nabeul",
+  "role": "departure",
+  "lines": [
+    {
+      "line": "101-01",
+      "station": "Nabeul",
+      "role": "departure",
+      "connections": ["Kairouan"],
+      "route_count": 4
+    },
+    {
+      "line": "102-01",
+      "station": "Nabeul",
+      "role": "departure",
+      "connections": ["Tunis"],
+      "route_count": 6
+    },
+    {
+      "line": "102-03",
+      "station": "Nabeul",
+      "role": "departure",
+      "connections": ["Maamoura", "Tunis"],
+      "route_count": 6
+    }
+  ],
+  "total_lines": 50,
+  "metadata": {
+    "search_timestamp": "2025-10-10T11:14:53.722794"
+  }
+}
+```
+
+### 7. Get Routes by Line
+
+**GET** `/lines/{line}/routes`
+
+Get all routes for a specific bus line with optional day filtering.
+
+**Parameters:**
+
+- `line` (required): Bus line identifier (e.g., "101-01")
+- `day` (optional): Day of week in English (monday, tuesday, wednesday, thursday, friday, saturday, sunday)
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "line": "101-01",
+  "routes": [
+    {
+      "line": "101-01",
+      "origin": "Nabeul",
+      "destination": "Kairouan",
+      "departure_time": "06:30",
+      "duration": 130,
+      "service_type": "Luxe",
+      "route_details": "Nabeul → Kairouan",
+      "days": {
+        "monday": true,
+        "tuesday": true,
+        "wednesday": true,
+        "thursday": true,
+        "friday": true,
+        "saturday": true,
+        "sunday": true
+      },
+      "season": "Summer"
+    },
+    {
+      "line": "101-01",
+      "origin": "Nabeul",
+      "destination": "Kairouan",
+      "departure_time": "10:00",
+      "duration": 135,
+      "service_type": "Luxe",
+      "route_details": "Nabeul → Kairouan",
+      "days": {
+        "monday": true,
+        "tuesday": true,
+        "wednesday": true,
+        "thursday": true,
+        "friday": true,
+        "saturday": true,
+        "sunday": false
+      },
+      "season": "Summer"
+    }
+  ],
+  "total_routes": 2,
+  "metadata": {
+    "search_timestamp": "2025-10-10T11:15:30.123456",
+    "day_filter": "monday"
+  }
+}
+```
+
+### 8. Get Route Recommendations (POST Method)
 
 **POST** `/recommendations`
 
@@ -284,13 +413,13 @@ Get current date, day, and season information for automatic filtering.
 }
 ```
 
-### 6. Get Route Recommendations (GET Method)
+### 9. Get Route Recommendations (GET Method)
 
 **GET** `/recommendations?origin=Nabeul&destination=Tunis&preferred_time=08:00&preferred_day=Lundi&preferred_season=Summer&max_results=5`
 
 Same functionality as POST but with query parameters.
 
-### 7. Test Endpoint
+### 10. Test Endpoint
 
 **GET** `/test`
 
@@ -307,6 +436,8 @@ Simple endpoint to verify API is running with endpoint information.
     "health": "/health",
     "stations": "/stations",
     "seasons": "/seasons",
+    "lines": "/lines",
+    "line_routes": "/lines/{line}/routes",
     "current_info": "/current-info",
     "recommendations_post": "/recommendations (POST)",
     "recommendations_get": "/recommendations (GET)",
@@ -315,7 +446,7 @@ Simple endpoint to verify API is running with endpoint information.
 }
 ```
 
-### 8. Documentation Endpoints
+### 11. Documentation Endpoints
 
 - **Swagger UI**: `http://localhost:8000/docs`
 - **ReDoc**: `http://localhost:8000/redoc`

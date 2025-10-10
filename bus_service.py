@@ -108,6 +108,23 @@ class BusRecommendationService:
         """Find direct routes between origin and destination using French names"""
         if not self.data_loaded:
             return pd.DataFrame()
+        
+        # Make station names case-insensitive by converting to lowercase
+        origin_french_normalized = origin_french.strip()
+        destination_french_normalized = destination_french.strip()
+        
+        # Find case-insensitive match in available stations
+        origin_match_french = next((station for station in self.available_stations 
+                                  if station.lower() == origin_french_normalized.lower()), None)
+        destination_match_french = next((station for station in self.available_stations 
+                                       if station.lower() == destination_french_normalized.lower()), None)
+        
+        # If found, use the correctly cased station name
+        if origin_match_french:
+            origin_french = origin_match_french
+        
+        if destination_match_french:
+            destination_french = destination_match_french
             
         # Convert French names to Arabic for data lookup
         origin_arabic = translate_station_to_arabic(origin_french)
@@ -144,6 +161,23 @@ class BusRecommendationService:
         """Find routes with one transfer using French names"""
         if not self.data_loaded:
             return []
+        
+        # Make station names case-insensitive by converting to lowercase
+        origin_french_normalized = origin_french.strip()
+        destination_french_normalized = destination_french.strip()
+        
+        # Find case-insensitive match in available stations
+        origin_match_french = next((station for station in self.available_stations 
+                                  if station.lower() == origin_french_normalized.lower()), None)
+        destination_match_french = next((station for station in self.available_stations 
+                                       if station.lower() == destination_french_normalized.lower()), None)
+        
+        # If found, use the correctly cased station name
+        if origin_match_french:
+            origin_french = origin_match_french
+        
+        if destination_match_french:
+            destination_french = destination_match_french
             
         # Convert French names to Arabic for data lookup
         origin_arabic = translate_station_to_arabic(origin_french)
@@ -239,6 +273,23 @@ class BusRecommendationService:
         
         if not self.data_loaded:
             raise Exception("Bus data not loaded. Please check if the Excel file exists.")
+        
+        # Make station names case-insensitive by converting to lowercase
+        origin_french_normalized = origin_french.strip()
+        destination_french_normalized = destination_french.strip()
+        
+        # Find case-insensitive match in available stations
+        origin_match_french = next((station for station in self.available_stations 
+                                  if station.lower() == origin_french_normalized.lower()), None)
+        destination_match_french = next((station for station in self.available_stations 
+                                       if station.lower() == destination_french_normalized.lower()), None)
+        
+        # If found, use the correctly cased station name
+        if origin_match_french:
+            origin_french = origin_match_french
+        
+        if destination_match_french:
+            destination_french = destination_match_french
         
         # Convert to Arabic for data lookup
         origin_arabic = translate_station_to_arabic(origin_french)
@@ -474,3 +525,193 @@ class BusRecommendationService:
     def get_current_info(self) -> Dict:
         """Get current date and season information"""
         return get_current_date_info()
+        
+    def get_available_lines(self) -> List[str]:
+        """Get list of all available bus lines"""
+        if not self.data_loaded:
+            return []
+            
+        # Check if the column exists (might have different whitespace)
+        line_column = None
+        for col in self.df.columns:
+            if 'الخط' in col:
+                line_column = col
+                break
+                
+        if not line_column:
+            return []
+            
+        # Get all unique line values and filter out empty ones
+        lines = self.df[line_column].dropna().unique().tolist()
+        lines = [line.strip() for line in lines if isinstance(line, str) and line.strip()]
+        return sorted(set(lines))
+        
+    def get_lines_by_station(self, station_name: str, as_departure: bool = True) -> List[Dict]:
+        """
+        Get all bus lines that have a specific station as departure or destination
+        
+        Args:
+            station_name: Name of the station in French
+            as_departure: If True, find lines where this station is the departure point
+                         If False, find lines where this station is the destination
+        
+        Returns:
+            List of dictionaries with line information
+        """
+        if not self.data_loaded:
+            return []
+        
+        # Make station name case-insensitive by converting to lowercase
+        station_name_normalized = station_name.strip()
+        
+        # Find case-insensitive match in available stations
+        station_match_french = next((station for station in self.available_stations 
+                                  if station.lower() == station_name_normalized.lower()), None)
+        
+        # If found, use the correctly cased station name
+        if station_match_french:
+            station_name = station_match_french
+        else:
+            return []  # Station not found
+        
+        # Convert to Arabic for data lookup
+        station_arabic = translate_station_to_arabic(station_name)
+        
+        # Find matching station in the dataset
+        column_name = 'محطة الانطلاق' if as_departure else 'محطة الوصول'
+        station_match = find_matching_station(self.df, station_arabic, column_name)
+        
+        if not station_match:
+            return []
+        
+        # Check if the line column exists (might have different whitespace)
+        line_column = None
+        for col in self.df.columns:
+            if 'الخط' in col:
+                line_column = col
+                break
+                
+        if not line_column:
+            return []
+            
+        # Filter routes by station
+        routes = self.df[self.df[column_name] == station_match].copy()
+        
+        if routes.empty:
+            return []
+            
+        # Get unique lines for this station
+        lines = []
+        unique_lines = routes[line_column].dropna().unique()
+        
+        for line in unique_lines:
+            if not isinstance(line, str) or not line.strip():
+                continue
+                
+            line_routes = routes[routes[line_column] == line]
+            
+            # Get all unique destinations for this line and station
+            if as_departure:
+                destinations = line_routes['محطة الوصول'].unique()
+                destinations_french = [translate_station_to_french(dest) for dest in destinations]
+            else:
+                origins = line_routes['محطة الانطلاق'].unique()
+                origins_french = [translate_station_to_french(origin) for origin in origins]
+            
+            # Create line info
+            line_info = {
+                'line': line.strip(),
+                'station': station_name,
+                'role': 'departure' if as_departure else 'destination',
+                'connections': sorted(destinations_french) if as_departure else sorted(origins_french),
+                'route_count': len(line_routes)
+            }
+            
+            lines.append(line_info)
+            
+        # Sort by line number
+        lines.sort(key=lambda x: x['line'])
+        return lines
+        
+    def get_routes_by_line(self, line: str) -> List[Dict]:
+        """Get all routes for a specific bus line"""
+        if not self.data_loaded:
+            return []
+            
+        # Check if the column exists (might have different whitespace)
+        line_column = None
+        for col in self.df.columns:
+            if 'الخط' in col:
+                line_column = col
+                break
+                
+        if not line_column:
+            return []
+            
+        # Make line search case-insensitive
+        line = line.strip()
+        
+        # Find matching line in the dataset
+        matching_lines = [l for l in self.df[line_column].dropna().unique() 
+                        if isinstance(l, str) and l.strip().lower() == line.lower()]
+        
+        if not matching_lines:
+            return []
+            
+        # Use the first match (should be only one)
+        line_match = matching_lines[0]
+        
+        # Get all routes for this line
+        routes = self.df[self.df[line_column] == line_match].copy()
+        
+        if routes.empty:
+            return []
+            
+        # Format the results
+        results = []
+        for _, route in routes.iterrows():
+            # Extract time information
+            departure_time = route['ساعة الإنطلاق'] if 'ساعة الإنطلاق' in route else route[' ساعة الإنطلاق']
+            
+            if isinstance(departure_time, str) and ':' in departure_time:
+                hour, minute = map(int, departure_time.split(':'))
+                departure_formatted = f"{hour:02d}:{minute:02d}"
+            else:
+                departure_formatted = "N/A"
+                
+            # Extract duration
+            duration = int(route['durée_min']) if 'durée_min' in route and pd.notna(route['durée_min']) else "N/A"
+            
+            # Get station names in French
+            origin = route['محطة الانطلاق']
+            destination = route['محطة الوصول']
+            origin_french = translate_station_to_french(origin)
+            destination_french = translate_station_to_french(destination)
+            
+            # Get service type
+            service_type = "Luxe" if route['نوع الخدمة'] == 'رفاهة' else "Standard"
+            
+            # Create route information
+            route_info = {
+                'line': line_match.strip(),
+                'origin': origin_french,
+                'destination': destination_french,
+                'departure_time': departure_formatted,
+                'duration': duration,
+                'service_type': service_type,
+                'route_details': f"{origin_french} → {destination_french}",
+                'days': {
+                    'monday': route['إثنين'] == 'X' if 'إثنين' in route else False,
+                    'tuesday': route['ثلاثاء'] == 'X' if 'ثلاثاء' in route else False,
+                    'wednesday': route['اربعاء'] == 'X' if 'اربعاء' in route else False,
+                    'thursday': route['خميس'] == 'X' if 'خميس' in route else False,
+                    'friday': route['جمعة'] == 'X' if 'جمعة' in route else False,
+                    'saturday': route['سبت'] == 'X' if 'سبت' in route else False,
+                    'sunday': route['أحد'] == 'X' if 'أحد' in route else False,
+                },
+                'season': route['الموسم'] if 'الموسم' in route and pd.notna(route['الموسم']) else None
+            }
+            
+            results.append(route_info)
+            
+        return results
