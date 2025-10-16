@@ -12,10 +12,10 @@ class RouteRecommendationRequest(BaseModel):
     origin: str = Field(..., description="Origin station name in French", example="Nabeul")
     destination: str = Field(..., description="Destination station name in French", example="Tunis")
     preferred_time: Optional[str] = Field(None, description="Preferred departure time in HH:MM format", example="08:30")
-    preferred_day: Optional[Literal["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]] = Field(
+    preferred_day: Optional[str] = Field(
         None, description="Preferred day of week in French", example="Lundi"
     )
-    preferred_season: Optional[Literal["Summer", "Winter", "Ramadan"]] = Field(
+    preferred_season: Optional[str] = Field(
         None, description="Preferred season", example="Summer"
     )
     max_results: Optional[int] = Field(5, description="Maximum number of recommendations to return", ge=1, le=20)
@@ -36,6 +36,34 @@ class RouteRecommendationRequest(BaseModel):
                 return f"{hour:02d}:{minute:02d}"
             except (ValueError, IndexError):
                 raise ValueError("Invalid time format. Use HH:MM (e.g., 08:30)")
+        return v
+        
+    @validator('preferred_day')
+    def normalize_day(cls, v):
+        """Normalize day name to handle case-insensitivity"""
+        if v is not None:
+            v = v.strip()
+            # Map common day names to standard format
+            day_mapping = {
+                'lundi': 'Lundi', 'mardi': 'Mardi', 'mercredi': 'Mercredi',
+                'jeudi': 'Jeudi', 'vendredi': 'Vendredi', 'samedi': 'Samedi',
+                'dimanche': 'Dimanche'
+            }
+            return day_mapping.get(v.lower(), v)
+        return v
+        
+    @validator('preferred_season')
+    def normalize_season(cls, v):
+        """Normalize season name to handle case-insensitivity"""
+        if v is not None:
+            v = v.strip()
+            # Map common season names to standard format
+            season_mapping = {
+                'summer': 'Summer', 'été': 'Summer', 'ete': 'Summer',
+                'winter': 'Winter', 'hiver': 'Winter',
+                'ramadan': 'Ramadan'
+            }
+            return season_mapping.get(v.lower(), v)
         return v
 
 class TransferDetails(BaseModel):

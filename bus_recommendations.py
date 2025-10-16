@@ -286,34 +286,91 @@ def get_available_seasons_from_data(df):
     return ['Summer', 'Winter', 'Ramadan']  # Default fallback
 
 def translate_station_to_french(arabic_name):
-    """Translate Arabic station name to French"""
-    return STATION_TRANSLATIONS.get(arabic_name, arabic_name)
+    """Translate Arabic station name to French with case-insensitive matching"""
+    # Try direct lookup first
+    result = STATION_TRANSLATIONS.get(arabic_name, None)
+    if result is not None:
+        return result
+    
+    # Try case-insensitive lookup with normalized whitespace
+    arabic_normalized = arabic_name.strip()
+    for key, value in STATION_TRANSLATIONS.items():
+        if key.strip() == arabic_normalized:
+            return value
+    
+    # Return original if no match found
+    return arabic_name
 
 def translate_station_to_arabic(french_name):
-    """Translate French station name to Arabic for data lookup"""
-    return STATION_REVERSE.get(french_name, french_name)
+    """Translate French station name to Arabic for data lookup with case-insensitive matching"""
+    # Try direct lookup first
+    result = STATION_REVERSE.get(french_name, None)
+    if result is not None:
+        return result
+    
+    # Try case-insensitive lookup
+    french_normalized = french_name.strip().lower()
+    for key, value in STATION_REVERSE.items():
+        if key.lower() == french_normalized:
+            return value
+    
+    # Return original if no match found
+    return french_name
 
 def find_matching_station(df, station_name, column_name):
-    """Find matching station name handling whitespace variations and case insensitivity"""
+    """Find matching station name handling variations, misspellings, and case sensitivity"""
     # Get all unique stations from the column
     all_stations = df[column_name].dropna().unique()
-
-    # First try exact match
-    if station_name in all_stations:
-        return station_name
-
-    # Try with stripped whitespace and case-insensitive matching
-    station_stripped = station_name.strip().lower()
+    
+    # Normalize input station name (strip whitespace and convert to lowercase)
+    station_normalized = station_name.strip().lower()
+    
+    # First try exact match (case insensitive)
     for station in all_stations:
-        if station.strip().lower() == station_stripped:
+        if station.strip().lower() == station_normalized:
             return station
-
-    # Try partial match
+    
+    # Try partial match (case insensitive)
     for station in all_stations:
-        if station_stripped in station.strip() or station.strip() in station_stripped:
+        if station_normalized in station.strip().lower() or station.strip().lower() in station_normalized:
             return station
-
-    return None
+    
+    # Try fuzzy matching for possible misspellings
+    best_match = None
+    best_score = 0
+    
+    for station in all_stations:
+        # Calculate similarity score based on character overlap
+        station_lower = station.strip().lower()
+        
+        # Skip very short strings to avoid false positives
+        if len(station_lower) < 3 or len(station_normalized) < 3:
+            continue
+            
+        # Simple character-based similarity
+        common_chars = set(station_lower) & set(station_normalized)
+        similarity = len(common_chars) / max(len(set(station_lower)), len(set(station_normalized)))
+        
+        # Check for common prefixes (weighted more heavily)
+        prefix_length = 0
+        for i in range(min(len(station_lower), len(station_normalized))):
+            if station_lower[i] == station_normalized[i]:
+                prefix_length += 1
+            else:
+                break
+        
+        # Calculate prefix score (0-1)
+        prefix_score = prefix_length / min(len(station_lower), len(station_normalized)) if min(len(station_lower), len(station_normalized)) > 0 else 0
+        
+        # Combined score (weighted more towards prefix matching)
+        score = (similarity * 0.4) + (prefix_score * 0.6)
+        
+        # Update best match if this score is better
+        if score > best_score and score > 0.5:  # Threshold to avoid poor matches
+            best_score = score
+            best_match = station
+    
+    return best_match
 
 def translate_day_to_french(arabic_day):
     """Translate Arabic day to French"""

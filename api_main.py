@@ -141,136 +141,6 @@ async def get_seasons():
             status_code=500,
             detail=f"Error retrieving seasons: {str(e)}"
         )
-        
-@app.get("/lines")
-async def get_lines():
-    """Get list of available bus lines"""
-    global bus_service
-    
-    if not bus_service or not bus_service.is_data_loaded():
-        raise HTTPException(
-            status_code=503,
-            detail="Bus data service unavailable"
-        )
-    
-    try:
-        lines = bus_service.get_available_lines()
-        return {
-            "success": True,
-            "lines": lines,
-            "total_lines": len(lines)
-        }
-    except Exception as e:
-        logger.error(f"Error getting bus lines: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error retrieving bus lines: {str(e)}"
-        )
-        
-@app.get("/stations/{station_name}/lines")
-async def get_lines_by_station(
-    station_name: str,
-    role: str = Query("departure", description="Role of the station: 'departure' or 'destination'")
-):
-    """
-    Get all bus lines that have a specific station as departure or destination point
-    
-    Args:
-        station_name: Name of the station in French
-        role: Role of the station ('departure' or 'destination')
-    """
-    global bus_service
-    
-    if not bus_service or not bus_service.is_data_loaded():
-        raise HTTPException(
-            status_code=503,
-            detail="Bus data service unavailable"
-        )
-    
-    # Validate role parameter
-    as_departure = True
-    if role.lower() not in ["departure", "destination"]:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid role parameter. Must be 'departure' or 'destination'"
-        )
-    as_departure = (role.lower() == "departure")
-    
-    try:
-        logger.info(f"Processing lines by station request: Station {station_name}, Role: {role}")
-        lines = bus_service.get_lines_by_station(station_name, as_departure)
-        
-        if not lines:
-            return {
-                "success": True,
-                "station": station_name,
-                "role": role,
-                "lines": [],
-                "total_lines": 0,
-                "message": f"No lines found for station '{station_name}' as {role}"
-            }
-        
-        return {
-            "success": True,
-            "station": station_name,
-            "role": role,
-            "lines": lines,
-            "total_lines": len(lines),
-            "metadata": {
-                "search_timestamp": datetime.now().isoformat()
-            }
-        }
-    except Exception as e:
-        logger.error(f"Error getting lines for station {station_name}: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error getting lines for station {station_name}: {str(e)}"
-        )
-        
-@app.get("/lines/{line}/routes")
-async def get_routes_by_line(
-    line: str,
-    day: Optional[str] = None
-):
-    """Get all routes for a specific bus line"""
-    global bus_service
-    
-    if not bus_service or not bus_service.is_data_loaded():
-        raise HTTPException(
-            status_code=503,
-            detail="Bus data service unavailable"
-        )
-    
-    try:
-        logger.info(f"Processing line routes request: Line {line}")
-        routes = bus_service.get_routes_by_line(line)
-        
-        # Filter by day if specified
-        if day and routes:
-            day_lower = day.lower()
-            valid_days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
-            
-            if day_lower in valid_days:
-                routes = [route for route in routes if route['days'][day_lower]]
-        
-        return {
-            "success": True,
-            "line": line,
-            "routes": routes,
-            "total_routes": len(routes),
-            "metadata": {
-                "search_timestamp": datetime.now().isoformat(),
-                "day_filter": day
-            }
-        }
-    except Exception as e:
-        logger.error(f"Error getting routes for line {line}: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error getting routes for line {line}: {str(e)}"
-        )
 
 @app.get("/current-info")
 async def get_current_info():
@@ -308,12 +178,16 @@ async def get_route_recommendations(request: RouteRecommendationRequest):
         )
     
     try:
-        logger.info(f"Processing recommendation request: {request.origin} → {request.destination}")
+        # Normalize input station names (trim whitespace)
+        origin = request.origin.strip() if request.origin else request.origin
+        destination = request.destination.strip() if request.destination else request.destination
         
-        # Get recommendations from service
+        logger.info(f"Processing recommendation request: {origin} → {destination}")
+        
+        # Get recommendations from service with improved matching
         recommendations_data = bus_service.get_recommendations(
-            origin_french=request.origin,
-            destination_french=request.destination,
+            origin_french=origin,
+            destination_french=destination,
             preferred_time=request.preferred_time,
             preferred_day=request.preferred_day,
             preferred_season=request.preferred_season,
@@ -407,10 +281,14 @@ async def get_route_recommendations_get(
 ):
     """Get bus route recommendations using GET method (for easier testing)"""
     
+    # Normalize input station names (trim whitespace)
+    origin_normalized = origin.strip() if origin else origin
+    destination_normalized = destination.strip() if destination else destination
+    
     # Create request object and use the POST handler
     request_obj = RouteRecommendationRequest(
-        origin=origin,
-        destination=destination,
+        origin=origin_normalized,
+        destination=destination_normalized,
         preferred_time=preferred_time,
         preferred_day=preferred_day,
         preferred_season=preferred_season,
@@ -431,9 +309,6 @@ async def test_endpoint():
             "health": "/health",
             "stations": "/stations",
             "seasons": "/seasons",
-            "lines": "/lines",
-            "station_lines": "/stations/{station_name}/lines",
-            "line_routes": "/lines/{line}/routes",
             "current_info": "/current-info",
             "recommendations_post": "/recommendations (POST)",
             "recommendations_get": "/recommendations (GET)",
